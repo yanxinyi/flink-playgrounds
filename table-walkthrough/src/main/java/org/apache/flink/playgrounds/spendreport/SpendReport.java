@@ -28,42 +28,31 @@ import static org.apache.flink.table.api.Expressions.*;
 
 public class SpendReport {
 
-    public static Table report(Table transactions) {
-        throw new UnimplementedException();
-    }
-
     public static void main(String[] args) throws Exception {
         EnvironmentSettings settings = EnvironmentSettings.newInstance().build();
+        
         TableEnvironment tEnv = TableEnvironment.create(settings);
+        
+        tEnv.executeSql("CREATE FUNCTION RandomUdf AS 'org.apache.flink.playgrounds.spendreport.RandomUdf'");
 
-        tEnv.executeSql("CREATE TABLE transactions (\n" +
-                "    account_id  BIGINT,\n" +
-                "    amount      BIGINT,\n" +
-                "    transaction_time TIMESTAMP(3),\n" +
-                "    WATERMARK FOR transaction_time AS transaction_time - INTERVAL '5' SECOND\n" +
+        tEnv.executeSql("CREATE TABLE datagenTable (\n" +
+                "    id  INT\n" +
                 ") WITH (\n" +
-                "    'connector' = 'kafka',\n" +
-                "    'topic'     = 'transactions',\n" +
-                "    'properties.bootstrap.servers' = 'kafka:9092',\n" +
-                "    'scan.startup.mode' = 'earliest-offset',\n" +
-                "    'format'    = 'csv'\n" +
+                "    'connector' = 'datagen',\n" +
+                "    'number-of-rows' = '5',\n" +
+                "    'rows-per-second' = '1',\n" +
+                "    'fields.id.kind' = 'sequence',\n" +
+                "    'fields.id.start' = '1',\n" +
+                "    'fields.id.end' = '5'\n" +
                 ")");
 
-        tEnv.executeSql("CREATE TABLE spend_report (\n" +
-                "    account_id BIGINT,\n" +
-                "    log_ts     TIMESTAMP(3),\n" +
-                "    amount     BIGINT\n," +
-                "    PRIMARY KEY (account_id, log_ts) NOT ENFORCED" +
+        tEnv.executeSql("CREATE TABLE print_table (\n" +
+                "    id_in_bytes  VARBINARY,\n" +
+                "    id  INT\n" +
                 ") WITH (\n" +
-                "  'connector'  = 'jdbc',\n" +
-                "  'url'        = 'jdbc:mysql://mysql:3306/sql-demo',\n" +
-                "  'table-name' = 'spend_report',\n" +
-                "  'driver'     = 'com.mysql.jdbc.Driver',\n" +
-                "  'username'   = 'sql-demo',\n" +
-                "  'password'   = 'demo-sql'\n" +
+                "    'connector' = 'print'\n" +
                 ")");
 
-        Table transactions = tEnv.from("transactions");
-        report(transactions).executeInsert("spend_report");
+        tEnv.executeSql("INSERT INTO print_table SELECT * FROM ( SELECT RandomUdf(`id`) AS `id_in_bytes`, `id` FROM datagenTable ) AS ET WHERE ET.`id_in_bytes` IS NOT NULL");
     }
 }
